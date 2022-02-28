@@ -1,0 +1,100 @@
+#!/bin/bash
+
+START_CMD=""
+KILL_CMD=""
+DENY_LIST=""
+
+if [ -n "$CMM_START_CMD" ]; then
+  START_CMD="$CMM_START_CMD"
+fi
+
+if [ -n "$CMM_KILL_CMD" ]; then
+  KILL_CMD="$CMM_KILL_CMD"
+fi
+
+if [ -n "$CMM_DENY_LIST" ]; then
+  DENY_LIST="$CMM_DENY_LIST"
+fi
+
+DELAY="1"
+
+while [[ $# -gt 0 ]]; do
+  key="$1"
+  case "$key" in
+  -h|--help)
+    HELP=1
+    shift
+    ;;
+  -s|--start)
+    START_CMD="$2"
+    shift
+    shift
+    ;;
+  -k|--kill)
+    KILL_CMD="$2"
+    shift
+    shift
+    ;;
+  -t|--timer)
+    DELAY="$2"
+    shift
+    shift
+    ;;
+  -d|--deny)
+    DENY_LIST="$2"
+    shift
+    shift
+    ;;
+  esac
+done
+
+if [ $HELP ]; then
+  echo "Usage: $0 [-h |--help] [-s | --start <start_cmd>] [-k | --kill <kill_cmd>] -d | --deny <deny_list>] [-t | --timer <timer>]"
+  echo "Automatically start- or stop compositioning manager depending on a deny-list of other programs"
+  echo "Where:"
+  echo "  -h | --help : Print this help"
+  echo "  -s | --start <start_cmd> : Command to start compositioning manager with"
+  echo "  -k | --kill <kill_cmd>   : Command to kill compositioning manager with (defaults to pkill the first word of <start_cmd>)"
+  echo "  -d | --deny <deny_list>  : Comma-separated list of programs to watch out for"
+  echo "  -t | --timer <timer>     : Interval in seconds to check, defaults to 1 (once every second)"
+  exit 0
+fi
+
+WM_CMD=$(echo "$START_CMD" | cut -d ' ' -f1)
+
+DENY_LIST=$(echo "$DENY_LIST" | sed 's/,/|/')
+
+if [ -z "$START_CMD" ]; then
+  echo "Start command not set, please set via -s flag or CMM_START_CMD environment variable"
+  exit 1
+fi
+
+if [ -z "$DENY_LIST" ]; then
+  echo "Deny list is empty, please set via -d flag or CMM_DENY_LIST environment variable"
+  exit 1
+fi
+
+if [ -z "$STOP_CMD" ]; then
+  echo "Stop command not set, assuming killall $WM_CMD"
+  KILL_CMD="killall $WM_CMD"
+fi
+
+#trap 'exit' INT
+while true; do
+  WM_RUNNING=$(pgrep "$WM_CMD")
+  DENY_RUNNING=$(pgrep "$DENY_LIST")
+
+  if [ -n "$WM_RUNNING" -a -n "$DENY_RUNNING" ]; then
+    echo "[$(date +%T)] $KILL_CMD"
+    $KILL_CMD
+  fi
+
+  if [ -z "$WM_RUNNING" -a -z "$DENY_RUNNING" ]; then
+    echo "[$(date +%T)] $START_CMD"
+    $START_CMD
+  fi
+
+  echo "TICK"
+
+  sleep "$DELAY"
+done
