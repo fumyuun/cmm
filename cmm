@@ -17,6 +17,7 @@ if [ -n "$CMM_DENY_LIST" ]; then
 fi
 
 DELAY="1"
+ACTION=""
 
 while [[ $# -gt 0 ]]; do
   key="$1"
@@ -45,14 +46,20 @@ while [[ $# -gt 0 ]]; do
     shift
     shift
     ;;
+  *)
+    ACTION="$1"
+    shift
+    ;;
   esac
 done
 
 if [ $HELP ]; then
-  echo "Usage: $0 [-h |--help] [-s | --start <start_cmd>] [-k | --kill <kill_cmd>] -d | --deny <deny_list>] [-t | --timer <timer>]"
+  echo "Usage: $0 [-h |--help] [-s | --start <start_cmd>] [-k | --kill <kill_cmd>] -d | --deny <deny_list>] [-t | --timer <timer>] <action>"
   echo "Automatically start- or stop compositioning manager depending on a deny-list of other programs"
   echo "Where:"
   echo "  -h | --help : Print this help"
+  echo "  <action>                 : one of start, stop, status, inhibit, release"
+  echo "The following flags are only relevant for the 'start' action"
   echo "  -s | --start <start_cmd> : Command to start compositioning manager with"
   echo "  -k | --kill <kill_cmd>   : Command to kill compositioning manager with (defaults to pkill the first word of <start_cmd>)"
   echo "  -d | --deny <deny_list>  : Comma-separated list of programs to watch out for"
@@ -60,7 +67,27 @@ if [ $HELP ]; then
   exit 0
 fi
 
-WM_CMD=$(echo "$START_CMD" | cut -d ' ' -f1)
+case "$ACTION" in
+start)
+  ;;
+stop)
+  ;;
+status|inhibit|release)
+  if [ ! -d /tmp/cmm -o ! -r /tmp/cmm/pid -o ! -r /tmp/cmm/status ]; then
+    echo "Not running"
+  else
+    [ "$ACTION" == "status"  ] && cat /tmp/cmm/status
+    [ "$ACTION" == "inhibit" ] && echo "1" > /tmp/cmm/inhibit
+    [ "$ACTION" == "release" ] && echo "0" > /tmp/cmm/inhibit
+  fi
+  exit 0
+  ;;
+*)
+  [ -z "$ACTION" ] && echo "Missing action argument" || echo "Invalid action argument $ACTION"
+  exit 1
+esac
+
+CM_CMD=$(echo "$START_CMD" | cut -d ' ' -f1)
 
 DENY_LIST=$(echo "$DENY_LIST" | sed 's/,/|/')
 
@@ -75,26 +102,48 @@ if [ -z "$DENY_LIST" ]; then
 fi
 
 if [ -z "$STOP_CMD" ]; then
-  echo "Stop command not set, assuming killall $WM_CMD"
-  KILL_CMD="killall $WM_CMD"
+  echo "Stop command not set, assuming killall -q $CM_CMD"
+  KILL_CMD="killall -q $CM_CMD"
 fi
 
-#trap 'exit' INT
+[ ! -d /tmp/cmm ] && mkdir /tmp/cmm
+
+if [ -r /tmp/cmm/pid ]; then
+  echo "cmm already running (pid $(cat /tmp/cmm/pid)? If crashed, please remove /tmp/cmm/pid and run again"
+  exit 0
+fi
+
+echo "$$" > /tmp/cmm/pid
+trap "rm /tmp/cmm/pid; $KILL_CMD; exit 0" INT
+
+echo "Running, inactive" > /tmp/cmm/status
+echo "0" > /tmp/cmm/inhibit
+
 while true; do
-  WM_RUNNING=$(pgrep "$WM_CMD")
-  DENY_RUNNING=$(pgrep "$DENY_LIST")
+  inhibited=$(cat /tmp/cmm/inhibit)
+  cm_running=$(pgrep "$CM_CMD")
+  deny_running=$(pgrep "$DENY_LIST")
 
-  if [ -n "$WM_RUNNING" -a -n "$DENY_RUNNING" ]; then
-    echo "[$(date +%T)] $KILL_CMD"
-    $KILL_CMD
+  # Stop if either deny-list is active OR inhibited
+  must_stop=0
+  [ -n "$cm_running" -a -n "$deny_running" ] && must_stop=1
+  [ -n "$cm_running" -a $inhibited -eq 1   ] && must_stop=1
+
+  if [ $must_stop -eq 1 ]; then
+    echo "[$(date +%T)] Killing CM: '$KILL_CMD'"
+    echo "Running, inactive" > /tmp/cmm/status
+    eval $KILL_CMD
   fi
 
-  if [ -z "$WM_RUNNING" -a -z "$DENY_RUNNING" ]; then
-    echo "[$(date +%T)] $START_CMD"
-    $START_CMD
-  fi
+  # Start if both deny-list is inactive AND not inhibited
+  must_start=0
+  [ -z "$cm_running" -a -z "$deny_running" -a $inhibited -eq 0 ] && must_start=1
 
-  echo "TICK"
+  if [ $must_start -eq 1 ]; then
+    echo "[$(date +%T)] Starting CM: '$START_CMD'"
+    echo "Running, active" > /tmp/cmm/status
+    eval $START_CMD
+  fi
 
   sleep "$DELAY"
 done
