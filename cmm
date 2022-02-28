@@ -71,6 +71,12 @@ case "$ACTION" in
 start)
   ;;
 stop)
+  if [ ! -d /tmp/cmm -o ! -r /tmp/cmm/pid -o ! -r /tmp/cmm/status ]; then
+    echo "Not running"
+  else
+    kill -s INT $(cat /tmp/cmm/pid)
+    exit 0
+  fi
   ;;
 status|inhibit|release)
   if [ ! -d /tmp/cmm -o ! -r /tmp/cmm/pid -o ! -r /tmp/cmm/status ]; then
