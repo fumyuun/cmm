@@ -3,20 +3,20 @@
 START_CMD=""
 KILL_CMD=""
 DENY_LIST=""
+POLL_DELAY=""
 
-if [ -n "$CMM_START_CMD" ]; then
-  START_CMD="$CMM_START_CMD"
+if [ -r "$HOME/.config/cmm.conf" ]; then
+  START_CMD=$(grep "^[ \t]*start[ \t]*=" "$HOME/.config/cmm.conf" | cut -d '=' -f2)
+  KILL_CMD=$(grep "^[ \t]*kill[ \t]*=" "$HOME/.config/cmm.conf" | cut -d '=' -f2)
+  DENY_LIST=$(grep "^[ \t]*deny-list[ \t]*=" "$HOME/.config/cmm.conf" | cut -d '=' -f2)
+  POLL_DELAY=$(grep "^[ \t]*poll-delay[ \t]*=" "$HOME/.config/cmm.conf" | cut -d '=' -f2)
 fi
 
-if [ -n "$CMM_KILL_CMD" ]; then
-  KILL_CMD="$CMM_KILL_CMD"
-fi
+[ -n "$CMM_START_CMD" ] && START_CMD="$CMM_START_CMD"
+[ -n "$CMM_KILL_CMD"  ] && KILL_CMD="$CMM_KILL_CMD"
+[ -n "$CMM_DENY_LIST" ] && DENY_LIST="$CMM_DENY_LIST"
+[ -n "$CMM_POLL_DELAY"] && POLL_DELAY="$CMM_POLL_DELAY"
 
-if [ -n "$CMM_DENY_LIST" ]; then
-  DENY_LIST="$CMM_DENY_LIST"
-fi
-
-DELAY="1"
 ACTION=""
 
 while [[ $# -gt 0 ]]; do
@@ -36,8 +36,8 @@ while [[ $# -gt 0 ]]; do
     shift
     shift
     ;;
-  -t|--timer)
-    DELAY="$2"
+  -p|--poll-delay)
+    POLL_DELAY="$2"
     shift
     shift
     ;;
@@ -54,7 +54,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ $HELP ]; then
-  echo "Usage: $0 [-h |--help] [-s | --start <start_cmd>] [-k | --kill <kill_cmd>] -d | --deny <deny_list>] [-t | --timer <timer>] <action>"
+  echo "Usage: $0 [-h |--help] [-s | --start <start_cmd>] [-k | --kill <kill_cmd>] -d | --deny <deny_list>] [-p | --poll-delay <delay>] <action>"
   echo "Automatically start- or stop compositioning manager depending on a deny-list of other programs"
   echo "Where:"
   echo "  -h | --help : Print this help"
@@ -63,7 +63,7 @@ if [ $HELP ]; then
   echo "  -s | --start <start_cmd> : Command to start compositioning manager with"
   echo "  -k | --kill <kill_cmd>   : Command to kill compositioning manager with (defaults to pkill the first word of <start_cmd>)"
   echo "  -d | --deny <deny_list>  : Comma-separated list of programs to watch out for"
-  echo "  -t | --timer <timer>     : Interval in seconds to check, defaults to 1 (once every second)"
+  echo "  -p | --poll-delay <delay>: Interval in seconds to poll, defaults to 1 (once every second)"
   exit 0
 fi
 
@@ -97,13 +97,15 @@ CM_CMD=$(echo "$START_CMD" | cut -d ' ' -f1)
 
 DENY_LIST=$(echo "$DENY_LIST" | sed 's/,/|/')
 
+[ -z "$POLL_DELAY" ] && POLL_DELAY="1"
+
 if [ -z "$START_CMD" ]; then
-  echo "Start command not set, please set via -s flag or CMM_START_CMD environment variable"
+  echo "Start command not set"
   exit 1
 fi
 
 if [ -z "$DENY_LIST" ]; then
-  echo "Deny list is empty, please set via -d flag or CMM_DENY_LIST environment variable"
+  echo "Deny list is empty"
   exit 1
 fi
 
@@ -151,5 +153,5 @@ while true; do
     eval $START_CMD
   fi
 
-  sleep "$DELAY"
+  sleep "$POLL_DELAY"
 done

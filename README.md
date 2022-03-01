@@ -21,13 +21,13 @@ Where action is one of the following:
 Only the start action accepts any more parameters to configure it.
 
 ## Configuration
-Currently CMM can be configured with environment variables or runtime flags (the latter takes priority).
+Currently CMM can be configured with a config file (`~/.config/cmm`) environment variables or runtime flags (in increasing priority).
 
-| Environment variable | Runtime flag    | Description                                                           |
-| -------------------- | --------------- | --------------------------------------------------------------------- |
-| `CMM_START_COMMAND`  | `-s`, `--start` | Sets the command used to start the compositioning manager.            |
-| `CMM_KILL_COMMAND`   | `-k`, `--kill`  | Sets the command used to kill the compositioning manager.             |
-| `CMM_DENY_LIST`      | `-d`, `--deny`  | Sets the deny-list, which is a comma-separated list of program names. |
-|                      | `-t`, `--timer` | The amount of time (in seconds) between checking.                     |
+| Configuration option | Environment variable | Runtime flag    | Description                                                           |
+| -------------------- | --------------- | -------------------------------------------------------------------------------------------- |
+| start                |  `CMM_START_COMMAND`  | `-s`, `--start` | Sets the command used to start the compositioning manager.           |
+| kill                 | `CMM_KILL_COMMAND`   | `-k`, `--kill`  | Sets the command used to kill the compositioning manager.             |
+| deny-list            | `CMM_DENY_LIST`      | `-d`, `--deny`  | Sets the deny-list, which is a comma-separated list of program names. |
+| poll-delay           | `CMM_POLL_DELAY`     | `-p`, `--poll-delay` | The amount of time (in seconds) between polling.                 |
 
-Out of these options, all except the kill command and the timer value are mandatory. The kill command by default will use `killall -q` and guesses the compositioning manager's executable name from the start command. The timer defaults to 1. Setting this higher would potentially lower CPU usage but this program is quite trivial anyway!
+Out of these options, all except the kill command and the poll-delay values are mandatory. The kill command by default will use `killall -q` and guesses the compositioning manager's executable name from the start command. The poll delay defaults to 1. Setting this higher would potentially lower CPU usage but this program is quite trivial anyway!
