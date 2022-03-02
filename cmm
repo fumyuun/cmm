@@ -46,6 +46,10 @@ while [[ $# -gt 0 ]]; do
     shift
     shift
     ;;
+  -v|--verbose)
+    VERBOSE=1
+    shift
+    ;;
   *)
     ACTION="$1"
     shift
@@ -58,6 +62,7 @@ if [ $HELP ]; then
   echo "Automatically start- or stop compositioning manager depending on a deny-list of other programs"
   echo "Where:"
   echo "  -h | --help : Print this help"
+  echo "  -v | --verbose           : increase verbosity"
   echo "  <action>                 : one of start, stop, status, inhibit, release"
   echo "The following flags are only relevant for the 'start' action"
   echo "  -s | --start <start_cmd> : Command to start compositioning manager with"
@@ -109,8 +114,8 @@ if [ -z "$DENY_LIST" ]; then
   exit 1
 fi
 
-if [ -z "$STOP_CMD" ]; then
-  echo "Stop command not set, assuming killall -q $CM_CMD"
+if [ -z "$KILL_CMD" ]; then
+  echo "Kill command not set, assuming killall -q $CM_CMD"
   KILL_CMD="killall -q $CM_CMD"
 fi
 
@@ -119,6 +124,12 @@ fi
 if [ -r /tmp/cmm/pid ]; then
   echo "cmm already running (pid $(cat /tmp/cmm/pid)? If crashed, please remove /tmp/cmm/pid and run again"
   exit 0
+fi
+
+if [ $VERBOSE ]; then
+  echo "Start command: '$START_CMD'"
+  echo "Kill command: '$KILL_CMD'"
+  echo "Deny list: '$DENY_LIST'"
 fi
 
 echo "$$" > /tmp/cmm/pid
@@ -138,7 +149,7 @@ while true; do
   [ -n "$cm_running" -a $inhibited -eq 1   ] && must_stop=1
 
   if [ $must_stop -eq 1 ]; then
-    echo "[$(date +%T)] Killing CM: '$KILL_CMD'"
+    [ $VERBOSE ] && echo "[$(date +%T)] Killing CM: '$KILL_CMD'"
     echo "Running, inactive" > /tmp/cmm/status
     eval $KILL_CMD
   fi
@@ -148,9 +159,9 @@ while true; do
   [ -z "$cm_running" -a -z "$deny_running" -a $inhibited -eq 0 ] && must_start=1
 
   if [ $must_start -eq 1 ]; then
-    echo "[$(date +%T)] Starting CM: '$START_CMD'"
+    [ $VERBOSE ] && echo "[$(date +%T)] Starting CM: '$START_CMD'"
     echo "Running, active" > /tmp/cmm/status
-    eval $START_CMD
+    eval "$START_CMD &"
   fi
 
   sleep "$POLL_DELAY"
