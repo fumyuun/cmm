@@ -2,20 +2,23 @@
 
 START_CMD=""
 KILL_CMD=""
-DENY_LIST=""
+PS_DENY_LIST=""
+X_DENY_LIST=""
 POLL_DELAY=""
 
 if [ -r "$HOME/.config/cmm.conf" ]; then
   START_CMD=$(grep "^[ \t]*start[ \t]*=" "$HOME/.config/cmm.conf" | cut -d '=' -f2)
   KILL_CMD=$(grep "^[ \t]*kill[ \t]*=" "$HOME/.config/cmm.conf" | cut -d '=' -f2)
-  DENY_LIST=$(grep "^[ \t]*deny-list[ \t]*=" "$HOME/.config/cmm.conf" | cut -d '=' -f2)
+  PS_DENY_LIST=$(grep "^[ \t]*ps-deny-list[ \t]*=" "$HOME/.config/cmm.conf" | cut -d '=' -f2)
+  X_DENY_LIST=$(grep "^[ \t]*x-deny-list[ \t]*=" "$HOME/.config/cmm.conf" | cut -d '=' -f2)
   POLL_DELAY=$(grep "^[ \t]*poll-delay[ \t]*=" "$HOME/.config/cmm.conf" | cut -d '=' -f2)
 fi
 
-[ -n "$CMM_START_CMD" ] && START_CMD="$CMM_START_CMD"
-[ -n "$CMM_KILL_CMD"  ] && KILL_CMD="$CMM_KILL_CMD"
-[ -n "$CMM_DENY_LIST" ] && DENY_LIST="$CMM_DENY_LIST"
-[ -n "$CMM_POLL_DELAY"] && POLL_DELAY="$CMM_POLL_DELAY"
+[ -n "$CMM_START_CMD"    ] && START_CMD="$CMM_START_CMD"
+[ -n "$CMM_KILL_CMD"     ] && KILL_CMD="$CMM_KILL_CMD"
+[ -n "$CMM_PS_DENY_LIST" ] && X_DENY_LIST="$CMM_X_DENY_LIST"
+[ -n "$CMM_X_DENY_LIST"  ] && PS_DENY_LIST="$CMM_PS_DENY_LIST"
+[ -n "$CMM_POLL_DELAY"   ] && POLL_DELAY="$CMM_POLL_DELAY"
 
 ACTION=""
 
@@ -36,13 +39,18 @@ while [[ $# -gt 0 ]]; do
     shift
     shift
     ;;
-  -p|--poll-delay)
+  -d|--poll-delay)
     POLL_DELAY="$2"
     shift
     shift
     ;;
-  -d|--deny)
-    DENY_LIST="$2"
+  -p|--ps-deny)
+    PS_DENY_LIST="$2"
+    shift
+    shift
+    ;;
+  -x|--x-deny)
+    X_DENY_LIST="$2"
     shift
     shift
     ;;
@@ -58,17 +66,18 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ $HELP ]; then
-  echo "Usage: $0 [-h |--help] [-s | --start <start_cmd>] [-k | --kill <kill_cmd>] -d | --deny <deny_list>] [-p | --poll-delay <delay>] <action>"
+  echo "Usage: $0 [-h |--help] [-s | --start <start_cmd>] [-k | --kill <kill_cmd>] [-p | --ps-deny <deny_list>] [-x | --x-deny <deny_list>] [-d | --poll-delay <delay>] <action>"
   echo "Automatically start- or stop compositioning manager depending on a deny-list of other programs"
   echo "Where:"
-  echo "  -h | --help : Print this help"
-  echo "  -v | --verbose           : increase verbosity"
-  echo "  <action>                 : one of start, stop, status, inhibit, release"
+  echo "  -h | --help               : Print this help"
+  echo "  -v | --verbose            : increase verbosity"
+  echo "  <action>                  : one of start, stop, status, inhibit, release"
   echo "The following flags are only relevant for the 'start' action"
-  echo "  -s | --start <start_cmd> : Command to start compositioning manager with"
-  echo "  -k | --kill <kill_cmd>   : Command to kill compositioning manager with (defaults to pkill the first word of <start_cmd>)"
-  echo "  -d | --deny <deny_list>  : Comma-separated list of programs to watch out for"
-  echo "  -p | --poll-delay <delay>: Interval in seconds to poll, defaults to 1 (once every second)"
+  echo "  -s | --start <start_cmd>  : Command to start compositioning manager with"
+  echo "  -k | --kill <kill_cmd>    : Command to kill compositioning manager with (defaults to pkill the first word of <start_cmd>)"
+  echo "  -p | --ps-deny <deny_list>: Comma-separated list of process names to watch out for"
+  echo "  -x | --x-deny <deny_list> : Comma-separated list of X window titles to watch out for"
+  echo "  -d | --poll-delay <delay> : Interval in seconds to poll, defaults to 1 (once every second)"
   exit 0
 fi
 
@@ -100,7 +109,8 @@ esac
 
 CM_CMD=$(echo "$START_CMD" | cut -d ' ' -f1)
 
-DENY_LIST=$(echo "$DENY_LIST" | sed 's/,/|/')
+PS_DENY_LIST=$(echo "$PS_DENY_LIST" | sed 's/,/|/')
+X_DENY_LIST=$(echo "$X_DENY_LIST" | sed 's/,/|/')
 
 [ -z "$POLL_DELAY" ] && POLL_DELAY="1"
 
@@ -109,7 +119,7 @@ if [ -z "$START_CMD" ]; then
   exit 1
 fi
 
-if [ -z "$DENY_LIST" ]; then
+if [ -z "$PS_DENY_LIST" -a -z "$X_DENY_LIST" ]; then
   echo "Deny list is empty"
   exit 1
 fi
@@ -129,7 +139,8 @@ fi
 if [ $VERBOSE ]; then
   echo "Start command: '$START_CMD'"
   echo "Kill command: '$KILL_CMD'"
-  echo "Deny list: '$DENY_LIST'"
+  echo "PS deny list: '$PS_DENY_LIST'"
+  echo "X deny list: '$X_DENY_LIST'"
 fi
 
 echo "$$" > /tmp/cmm/pid
@@ -141,7 +152,12 @@ echo "0" > /tmp/cmm/inhibit
 while true; do
   inhibited=$(cat /tmp/cmm/inhibit)
   cm_running=$(pgrep "$CM_CMD")
-  deny_running=$(pgrep "$DENY_LIST")
+
+  ps_deny_running=$(pgrep "$PS_DENY_LIST")
+  x_deny_running=$(xwininfo -root -children -all | grep "$X_DENY_LIST")
+
+  [ -n "$PS_DENY_LIST" -a -n "$ps_deny_running" ] && deny_running=1
+  [ -n "$X_DENY_LIST"  -a -n "$x_deny_running"  ] && deny_running=1
 
   # Stop if either deny-list is active OR inhibited
   must_stop=0
