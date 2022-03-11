@@ -154,15 +154,16 @@ while true; do
   cm_running=$(pgrep "$CM_CMD")
 
   ps_deny_running=$(pgrep "$PS_DENY_LIST")
-  x_deny_running=$(xwininfo -root -children -all | grep "$X_DENY_LIST")
+  x_deny_running=$(xwininfo -root -children -all | grep -E "$X_DENY_LIST")
 
+  deny_running=0
   [ -n "$PS_DENY_LIST" -a -n "$ps_deny_running" ] && deny_running=1
   [ -n "$X_DENY_LIST"  -a -n "$x_deny_running"  ] && deny_running=1
 
   # Stop if either deny-list is active OR inhibited
   must_stop=0
-  [ -n "$cm_running" -a -n "$deny_running" ] && must_stop=1
-  [ -n "$cm_running" -a $inhibited -eq 1   ] && must_stop=1
+  [ -n "$cm_running" -a $deny_running -eq 1 ] && must_stop=1
+  [ -n "$cm_running" -a $inhibited    -eq 1 ] && must_stop=1
 
   if [ $must_stop -eq 1 ]; then
     [ $VERBOSE ] && echo "[$(date +%T)] Killing CM: '$KILL_CMD'"
@@ -172,7 +173,7 @@ while true; do
 
   # Start if both deny-list is inactive AND not inhibited
   must_start=0
-  [ -z "$cm_running" -a -z "$deny_running" -a $inhibited -eq 0 ] && must_start=1
+  [ -z "$cm_running" -a "$deny_running" -eq 0 -a $inhibited -eq 0 ] && must_start=1
 
   if [ $must_start -eq 1 ]; then
     [ $VERBOSE ] && echo "[$(date +%T)] Starting CM: '$START_CMD'"
